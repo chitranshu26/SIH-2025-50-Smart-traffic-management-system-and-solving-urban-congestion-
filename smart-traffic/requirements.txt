@@ -1,0 +1,11 @@
+ultralytics
+opencv-python
+torch
+torchvision
+numpy
+pandas
+matplotlib
+scikit-learn
+fastapi
+uvicorn
+stable-baselines3
