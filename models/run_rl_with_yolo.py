@@ -28,10 +28,10 @@ YOLO_MODEL_PATH = r"smart-traffic\runs\detect\train4\weights\best.pt"
 RL_MODEL_PATH = r"models\traffic_dqn.zip"
 
 VIDEO_PATHS = [
-    r"videos\lane1.mp4",
-    r"videos\lane2.mp4",
-    r"videos\lane3.mp4",
-    r"videos\lane4.mp4",
+    r"traffic_dataset\Vehicle_Detection_Image_Dataset\samlpe_video1.mp4",
+    r"traffic_dataset\Vehicle_Detection_Image_Dataset\samlpe_video1.mp4",
+    r"traffic_dataset\Vehicle_Detection_Image_Dataset\samlpe_video1.mp4",
+    r"traffic_dataset\Vehicle_Detection_Image_Dataset\lane1.mp4",
 ]
 
 VEHICLE_CLASSES: Optional[set[int]] = None  # e.g. {2,3,5}, or None for all
@@ -41,9 +41,9 @@ DECISION_PERIOD_SEC = 2.5
 LOG_CSV = True
 CSV_PATH = "run_log.csv"
 
-LANE_COLORS = [(0,255,0),(0,200,255),(255,200,0),(200,0,255)]
-GREEN_TAG = (0,255,0)
-RED_TAG = (0,0,255)
+LANE_COLORS = [(0, 255, 0), (0, 200, 255), (255, 200, 0), (200, 0, 255)]
+GREEN_TAG = (0, 255, 0)
+RED_TAG = (0, 0, 255)
 
 
 # ---------------------
@@ -69,7 +69,7 @@ def read_frames(caps: List[cv2.VideoCapture], target_h: int = 360):
         ret, frame = cap.read()
         rets.append(ret)
         if not ret:
-            frames.append(np.zeros((target_h, target_h*16//9, 3), dtype=np.uint8))
+            frames.append(np.zeros((target_h, target_h * 16 // 9, 3), dtype=np.uint8))
         else:
             frames.append(frame)
     return rets, frames
@@ -101,11 +101,11 @@ def count_batch(model: YOLO, frames: List[np.ndarray]) -> tuple[list[int], list[
                     continue
                 x1, y1, x2, y2 = map(int, box[:4])
                 cnt += 1
-                cv2.rectangle(fr, (x1, y1), (x2, y2), (0,255,255), 2)
-                cx, cy = (x1+x2)//2, (y1+y2)//2
-                cv2.circle(fr, (cx, cy), 4, (0,255,0), -1)
+                cv2.rectangle(fr, (x1, y1), (x2, y2), (0, 255, 255), 2)
+                cx, cy = (x1 + x2) // 2, (y1 + y2) // 2
+                cv2.circle(fr, (cx, cy), 4, (0, 255, 0), -1)
 
-        cv2.putText(fr, f"Count: {cnt}", (20,40), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0,255,0), 3)
+        cv2.putText(fr, f"Count: {cnt}", (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 255, 0), 3)
         counts.append(int(cnt))
         annotated.append(fr)
 
@@ -115,9 +115,11 @@ def count_batch(model: YOLO, frames: List[np.ndarray]) -> tuple[list[int], list[
 def make_grid(frames: List[np.ndarray]) -> np.ndarray:
     assert len(frames) == 4, "Need 4 frames"
     h = min(f.shape[0] for f in frames)
-    resized = [cv2.resize(f, (int(f.shape[1]*(h/f.shape[0])), h)) for f in frames]
+    resized = [cv2.resize(f, (int(f.shape[1] * (h / f.shape[0])), h)) for f in frames]
     max_w = max(f.shape[1] for f in resized)
-    padded = [cv2.copyMakeBorder(f,0,0,0,max_w-f.shape[1],cv2.BORDER_CONSTANT) for f in resized]
+    padded = [
+        cv2.copyMakeBorder(f, 0, 0, 0, max_w - f.shape[1], cv2.BORDER_CONSTANT) for f in resized
+    ]
     top = np.hstack([padded[0], padded[1]])
     bottom = np.hstack([padded[2], padded[3]])
     return np.vstack([top, bottom])
@@ -140,7 +142,8 @@ def main():
 
     csv_file, csv_writer = None, None
     if LOG_CSV:
-        csv_file = open(CSV_PATH, "w", newline="", encoding="utf-8")
+        # ✅ Open in line-buffered mode for real-time logging
+        csv_file = open(CSV_PATH, "w", newline="", encoding="utf-8", buffering=1)
         csv_writer = csv.writer(csv_file)
         csv_writer.writerow(["timestamp", "lane_counts", "action"])
 
@@ -159,26 +162,27 @@ def main():
                 try:
                     action, _ = dqn.predict(state, deterministic=True)
                 except Exception:
-                    action, _ = dqn.predict(state.reshape(1,-1), deterministic=True)
+                    action, _ = dqn.predict(state.reshape(1, -1), deterministic=True)
                 current_action = int(action)
                 last_decision_t = now
 
             # Annotate GREEN/RED per lane
             for i, f in enumerate(annotated):
-                tag = f"Lane {i+1} {'GREEN' if i==current_action else 'RED'}"
-                color = GREEN_TAG if i==current_action else RED_TAG
-                cv2.putText(f, tag, (20,100), cv2.FONT_HERSHEY_SIMPLEX, 1.2, color, 3)
+                tag = f"Lane {i+1} {'GREEN' if i == current_action else 'RED'}"
+                color = GREEN_TAG if i == current_action else RED_TAG
+                cv2.putText(f, tag, (20, 100), cv2.FONT_HERSHEY_SIMPLEX, 1.2, color, 3)
                 h, w = f.shape[:2]
-                cv2.rectangle(f, (2,2), (w-2,h-2), LANE_COLORS[i], 4)
+                cv2.rectangle(f, (2, 2), (w - 2, h - 2), LANE_COLORS[i], 4)
 
             grid = make_grid(annotated)
             hud = f"State: {list(state.astype(int))}   RL -> GREEN: Lane {current_action+1}"
-            cv2.rectangle(grid, (0,0), (grid.shape[1], 44), (30,30,30), -1)
-            cv2.putText(grid, hud, (10,30), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255,255,255), 2)
+            cv2.rectangle(grid, (0, 0), (grid.shape[1], 44), (30, 30, 30), -1)
+            cv2.putText(grid, hud, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 255, 255), 2)
 
             cv2.imshow("Traffic RL (4 videos)", grid)
 
             if csv_writer:
+                # ✅ Each row is flushed immediately because of buffering=1
                 csv_writer.writerow([time.time(), list(state.astype(int)), int(current_action)])
 
             if cv2.waitKey(1) & 0xFF == ord("q"):
